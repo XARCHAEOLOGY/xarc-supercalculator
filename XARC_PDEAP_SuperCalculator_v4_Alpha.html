@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>XARC Holy Ultra Mega PDEAP SuperCalculator v4.0 Alpha</title>
+  <style>
+    body { background-color: #111; color: #d8b3ff; font-family: Arial, sans-serif; padding: 20px; }
+    h1, h2 { color: #a35aff; }
+    section { border: 1px solid #555; margin-bottom: 15px; padding: 10px; border-radius: 5px; background-color: #1a1a1a; }
+    canvas { border: 1px solid #fff; width: 100%; max-width: 800px; height: auto; }
+    input, select, button, textarea {
+      width: 100%; padding: 8px; margin: 5px 0; background: #222; color: #d8b3ff; border: 1px solid #777; border-radius: 4px;
+    }
+    .accordion { cursor: pointer; padding: 12px; background-color: #222; color: #d8b3ff; border: none; outline: none; width: 100%; text-align: left; font-size: 16px; transition: 0.4s; }
+    .panel { padding: 0 18px; display: none; overflow: hidden; background-color: #1a1a1a; }
+    .show { display: block; }
+  </style>
+</head>
+<body>
+
+  <h1>🧠 XARC Holy Ultra Mega PDEAP SuperCalculator v4.0 Alpha</h1>
+
+  <!-- Section 1: Photo Upload & Canvas -->
+  <button class="accordion">📸 Artifact Photo & Measurement</button>
+  <div class="panel">
+    <input type="file" id="imageInput" accept="image/*"><br>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <div id="output"></div>
+    <label>Real-world scale (mm between blue points):</label>
+    <input type="number" id="realMM" value="10" step="0.01">
+    <button onclick="calculateRatios()">Auto-Calculate µm Thickness</button>
+    <input type="number" id="accretionThickness" step="0.1" placeholder="Set by slider or auto-calculation">
+  </div>
+
+  <!-- Section 2: Ceramic, Glaze, Surface Loss -->
+  <button class="accordion">🏺 Ceramic Info & Surface Loss</button>
+  <div class="panel">
+    <label>Ceramic Type:</label>
+    <select id="ceramicType" onchange="updateMohsFromType(this.value)">
+      <option value="">-- Select Ceramic Type --</option>
+      <option value="fremont">Fremont</option>
+      <option value="porcelain">Porcelain</option>
+      <option value="ironstone">Ironstone</option>
+      <option value="angelstone">AngelStone</option>
+      <option value="demonstone">DemonStone</option>
+    </select>
+    <label>Mohs Hardness:</label>
+    <input type="number" id="mohs" readonly>
+    <label>Glaze % Coverage:</label>
+    <select id="glazeCoverage" onchange="document.getElementById('glazeMod').value=this.value">
+      <option value="1.0">100%</option>
+      <option value="0.75">75%</option>
+      <option value="0.5">50%</option>
+      <option value="0.25">25%</option>
+      <option value="0.1">10%</option>
+      <option value="0.01">Trace</option>
+    </select>
+    <input type="number" id="glazeMod" readonly>
+    <label>Measured Surface Loss (mm):</label>
+    <input type="number" id="surfaceLoss" step="0.01">
+  </div>
+
+  <!-- Section 3: UV + Accretion Style -->
+  <button class="accordion">💡 UV Fluorescence & Accretion Type</button>
+  <div class="panel">
+    <label>UV Response:</label>
+    <select id="uvResponse">
+      <option value="none">None</option>
+      <option value="blue">Blue</option>
+      <option value="green">Green</option>
+      <option value="orange">Orange</option>
+      <option value="white">White</option>
+    </select>
+    <label>Accretion Type:</label>
+    <select id="accretionType">
+      <option value="iron">Iron oxide</option>
+      <option value="manganese">Manganese</option>
+      <option value="silica">Silica</option>
+      <option value="calcium">Calcium</option>
+      <option value="mixed">Mixed</option>
+    </select>
+    <label>Perturbation Coefficient:</label>
+    <select id="perturbation">
+      <option value="1.0">Neutral</option>
+      <option value="0.5">Sealed</option>
+      <option value="2.0">Disturbed</option>
+    </select>
+  </div>
+
+  <!-- Section 4: Final Timeline Calculation -->
+  <button class="accordion">🧮 Timeline Calculator</button>
+  <div class="panel">
+    <button onclick="calculateSuper()">Calculate Combined Timeline</button>
+    <div id="finalOutput" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- Section 5: Bibliography -->
+  <button class="accordion">📚 Bibliography</button>
+  <div class="panel">
+    <p>* Post-Depositional Ceramic Accretion Mechanisms (2023), Materials Research Society</p>
+    <p>* Thermochemical Erosion in Ceramic Artifacts (2020), Journal of Archaeological Science</p>
+    <p>* UV Fluorescence Applications in Archaeology (2022), Antiquity Labs</p>
+  </div>
+
+  <script>
+    // Accordion toggle
+    const acc = document.getElementsByClassName("accordion");
+    for (let i = 0; i < acc.length; i++) {
+      acc[i].addEventListener("click", function() {
+        this.classList.toggle("active");
+        const panel = this.nextElementSibling;
+        panel.style.display = panel.style.display === "block" ? "none" : "block";
+      });
+    }
+
+    // Canvas logic
+    let points = [];
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.addEventListener("click", function(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      points.push({ x, y });
+      ctx.fillStyle = points.length <= 2 ? 'blue' : 'red';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, 2 * Math.PI);
+      ctx.fill();
+    });
+
+    document.getElementById("imageInput").addEventListener("change", function(e) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const img = new Image();
+        img.onload = function() {
+          canvas.width = 800;
+          canvas.height = img.height * (800 / img.width);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          document.getElementById("output").innerText = "✅ Image loaded.";
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(e.target.files[0]);
+    });
+
+    function distance(p1, p2) {
+      return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+    }
+
+    function calculateRatios() {
+      const output = document.getElementById("output");
+      if (points.length < 4) {
+        output.innerText = "⚠️ Click 2 scale + 2 accretion points.";
+        return;
+      }
+      const realMM = parseFloat(document.getElementById("realMM").value);
+      const pxScale = distance(points[0], points[1]);
+      const accPx = distance(points[2], points[3]);
+      const pxPerMM = pxScale / realMM;
+      const thickness = (1000 / pxPerMM) * accPx;
+      document.getElementById("accretionThickness").value = thickness.toFixed(1);
+      output.innerText = `✅ Thickness: ${thickness.toFixed(1)} µm`;
+    }
+
+    function updateMohsFromType(val) {
+      const mohsMap = { fremont: 2.5, porcelain: 7, ironstone: 6, angelstone: 7.5, demonstone: 8.5 };
+      document.getElementById("mohs").value = mohsMap[val] || '';
+    }
+
+    function calculateSuper() {
+      const erosion = parseFloat(document.getElementById("surfaceLoss").value || 0);
+      const glaze = parseFloat(document.getElementById("glazeMod").value || 1);
+      const mohs = parseFloat(document.getElementById("mohs").value || 1);
+      const acc = parseFloat(document.getElementById("accretionThickness").value || 0);
+      const pert = parseFloat(document.getElementById("perturbation").value || 1);
+      const erosionAge = erosion * mohs * (1 / glaze) * 100;
+      const accretionAge = acc * pert * 0.2;
+      const totalAge = erosionAge + accretionAge;
+      document.getElementById("finalOutput").innerHTML = `🕰 Estimated Combined Age: <strong>${totalAge.toFixed(1)} years</strong>`;
+    }
+  </script>
+
+</body>
+</html>
